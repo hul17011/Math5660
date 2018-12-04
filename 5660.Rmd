@@ -81,10 +81,10 @@ multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
 
 Set the $K= 100$
 ```{r code2}
-K=100                                     # Excercise price K
+K=100                                 # Excercise price K
 n <- 19
-B_S <- function(data,K){                  # Build the Bs call option function
-  call_value <- double(0)                 # calculate d1,d2,call option value,cashflow,replicating value
+B_S <- function(data,K){              # Build the Bs call option function
+  call_value <- double(0)             # calculate d1,d2,call option value,cashflow,replicating value
   d1 <- double(0)
   d2 <- double(0) 
   for(i in 1:20){
@@ -92,7 +92,7 @@ B_S <- function(data,K){                  # Build the Bs call option function
     d2[i] <- (log(data[i]/K)+(r-0.5*sigma^2)*(20-i)*T/n)/(sigma*sqrt((20-i)*T/n))
     call_value[i] <- data[i]*pnorm(d1[i])-K*exp(-r*(20-i)*T/n)*pnorm(d2[i])
     }
-  cashflow <- double(0)                   # calculate the cash flow and replicating value
+  cashflow <- double(0)               # calculate the cash flow and replicating value
   bt <- double(0)
   replicate <- double(0)
   bt[1] <- K*exp(-r*T)*pnorm(d2[1])
@@ -125,59 +125,67 @@ multiplot(plot5,plot2, plot3,layout=layout)
 
 The value of the replicating portfolio at time T \[C=\triangle S+B\]
 The terminal value of the call at time T \[C=max(S-K,0)\]
-Now repeat above process for 10000 times to generate the distribution of replicating error.
-```{r code3,fig.height=3}
-error <- double(0)
-for(i in 1:10000){
+Now repeat above process for 2000 times to generate the distribution of replicating error.
+```{r code3}
+stock <- call <- replicate <- error <- double(0)
+for(i in 1:2000){
   t <- B_S(S_T(s0,r,sigma,T),100)
   error[i] <- t$replicate[20]-t$call_option[20]
+  replicate[i] <- t$replicate[20]
+  call[i] <- t$call_option[20]
+  stock[i] <- t$stock[20]
 }
-
+```
+```{r 12,fig.height=6,fig.width=6,echo=FALSE}
 plot4<- ggplot(data.frame(x = error), aes(x = x))+ 
   geom_histogram(aes(y=..density..),fill="steelblue")+labs(x = 'r(t)', 
   y = 'density', title='Error distribution density')
-plot4
+plot13 <- ggplot(data.frame(x=stock,y1=replicate,y2=call))+
+  geom_point(aes(x=x,y=y1),size=0.5,color='steelblue')+
+  geom_point(aes(x=x,y=y2),size=0.5,color='orange')+
+  labs(title = "Value distribution",subtitle = "Replicate/BS call option",y="Option Value",x="Stock Value")
+layout <- matrix(c(1,2),2,1,byrow=TRUE)
+multiplot(plot4,plot13,layout=layout)
 ```
 
 
 # 3 Cash-or-nothing call option
 
-Cash-or-nothing call option either pays you a fixed amount of money or nothing at all.\[C_{cn}=e^{-r\tau}N(d2)\]
-where $S$ the initial stock price, $K$ the strike price, $T$ the time to maturity,$\sigma$ the volatility and r the risk free interest rate. We can replicate it with two call option with different exercise price, we can buy call at $K=100$ and sell call at $K=100+\epsilon$
+Cash-or-nothing call option either pays you a fixed amount of money or nothing at all.\[C_{cn}=ke^{-r\tau}N(d2)\]
+where $S$ the initial stock price, $K$ the strike price, $T$ the time to maturity,$\sigma$ the volatility and r the risk free interest rate, in thie section, we will set $k=1$ for convenience.
 ```{r code4,fig.height=3}
-epsilon <- 0.01
+t <- 1e-6
 C_N <- function(data,K){
-  call_value <- double(0)                 # calculate d1,d2,call option value,cashflow,replicating value
+  call_value <- double(0)             # calculate d1,d2,call option value,cashflow,replicating value
   d1 <- double(0)
-  d2 <- double(0) 
-  d11 <- double(0)
-  d21 <- double(0)
+  d2 <- double(0)
+  delta <- double(0)
   for(i in 1:20){
     d1[i] <- (log(data[i]/K)+(r+0.5*sigma^2)*(20-i)*T/n)/(sigma*sqrt((20-i)*T/n))
     d2[i] <- (log(data[i]/K)+(r-0.5*sigma^2)*(20-i)*T/n)/(sigma*sqrt((20-i)*T/n))
-    d11[i] <- (log(data[i]/(K+epsilon))+(r+0.5*sigma^2)*(20-i)*T/n)/(sigma*sqrt((20-i)*T/n))
-    d21[i] <- (log(data[i]/(K+epsilon))+(r-0.5*sigma^2)*(20-i)*T/n)/(sigma*sqrt((20-i)*T/n))
     call_value[i] <- exp(-r*(20-i)*T/n)*pnorm(d2[i])
-    }
-  cashflow <- double(0)                   # calculate the cash flow and replicating value
+    delta[i] <- exp(-r*(20-i)*T/n)*dnorm(d2[i])/(data[i]*sigma*sqrt((20-i)*T/n))
+  }
+  delta[20] <- 0
+  cashflow <- double(0)               # calculate the cash flow and replicating value
   bt <- double(0)
   replicate <- double(0)
-  bt[1] <- (K*exp(-r*T)*pnorm(d2[1])-(K+epsilon)*exp(-r*T)*pnorm(d21[1]))/epsilon
+  bt[1] <- -call_value[1]+data[1]*delta[1]
   cashflow[1] <- 0
-  replicate[1] <- (data[1]*pnorm(d1[1])-data[1]*pnorm(d11[1]))/epsilon-bt[1]
+  replicate[1] <- -bt[1]+data[1]*delta[1]
   for(i in 2:20){
-    cashflow[i] <- (data[i]*(pnorm(d1[i])-pnorm(d1[i-1]))-data[i]*(pnorm(d11[i])-pnorm(d11[i-1])))/epsilon
+    cashflow[i] <- data[i]*(delta[i]-delta[i-1])
     bt[i] <- bt[i-1]*exp(r*T/n)+cashflow[i]
-    replicate[i] <- -bt[i]+(data[i]*pnorm(d1[i])-data[i]*pnorm(d11[i]))/epsilon
+    replicate[i] <- data[i]*delta[i]- bt[i]
   }
-  return(data.frame(stock=data,d1=d1,bt=bt,replicate=replicate,cash_or_nothing=call_value))
+  return(data.frame(stock=data,delta=delta,bt=bt,replicate=replicate,CON=call_value))
 }
 call1 <- C_N(data,100)
 print(call1)
 ```
 
 ```{r plot3,fig.height=7,echo=FALSE}
-plot6 <- ggplot(data.frame(x=seq(1:20),call_value = call1$cash_or_nothing),aes(x=x,y=call_value))+
+plot6 <- ggplot(data.frame(x=seq(1:20),call_value = call1$CON),aes(x=x,y=call_value))+
   geom_line(col="steelblue", size=0.7)+scale_x_continuous(breaks=seq(1, 20, 1))+
   labs(title="Cash-or-nothing option value", subtitle="K=100")
 plot7 <- ggplot(data.frame(x=seq(1:20),delta = call1$replicate),aes(x=x,y=delta))+
@@ -191,20 +199,29 @@ layout <- matrix(c(1,2,3),3,1,byrow=TRUE)
 multiplot(plot8,plot6, plot7,layout=layout)
 ```
 
-The value of the replicating portfolio at time T \[C=\lim_{\epsilon \rightarrow 0}\frac{F(K)-F(K+\epsilon)}{\epsilon}\]
+The value of the replicating portfolio at time T \[C=\triangle S+B\]
 The terminal value of the call at time T \[C=\frac{max(S-K,0)}{|S-K|}\]
-Now repeat above process for 10000 times to generate the distribution of replicating error.
-```{r code5,fig.height=3}
-error <- double(0)
-for(i in 1:10000){
+Now repeat above process for 2000 times to generate the distribution of replicating error.
+```{r code5}
+stock <- call <- replicate <- error <- double(0)
+for(i in 1:2000){
   t <- C_N(S_T(s0,r,sigma,T),100)
-  error[i] <- t$replicate[20]-t$cash_or_nothing[20]
+  error[i] <- t$replicate[20]-t$CON[20]
+  replicate[i] <- t$replicate[20]
+  call[i] <- t$CON[20]
+  stock[i] <- t$stock[20]
 }
-
+```
+```{r 13,fig.height=5.5,fig.width=6,echo=FALSE}
 plot9<- ggplot(data.frame(x = error), aes(x = x))+ 
   geom_histogram(aes(y=..density..),fill="steelblue")+labs(x = 'r(t)', 
   y = 'density', title='Error distribution density')
-plot9
+plot14 <- ggplot(data.frame(x=stock,y1=replicate,y2=call))+
+  geom_point(aes(x=x,y=y1),size=0.5,color='steelblue')+
+  geom_point(aes(x=x,y=y2),size=0.5,color='orange')+
+  labs(title = "Value distribution",subtitle = "Replicate/CON call option",y="Option Value",x="Stock Value")
+layout <- matrix(c(1,2),2,1,byrow=TRUE)
+multiplot(plot9,plot14,layout=layout)
 ```
 
 # 4 Asset-or-nothing call option
@@ -215,37 +232,36 @@ In order to replicate this option, we can buy call at $K=100$ and buy K units ca
 ```{r code6,fig.height=3}
 epsilon <- 0.01
 A_N <- function(data,K){
-  call_value <- double(0)                 # calculate d1,d2,call option value,cashflow,replicating value
+  call_value <- double(0)             # calculate d1,d2,call option value,cashflow,replicating value
   d1 <- double(0)
-  d2 <- double(0) 
-  d11 <- double(0)
-  d21 <- double(0)
+  d2 <- double(0)
+  delta <- double(0)
   for(i in 1:20){
     d1[i] <- (log(data[i]/K)+(r+0.5*sigma^2)*(20-i)*T/n)/(sigma*sqrt((20-i)*T/n))
     d2[i] <- (log(data[i]/K)+(r-0.5*sigma^2)*(20-i)*T/n)/(sigma*sqrt((20-i)*T/n))
-    d11[i] <- (log(data[i]/(K+epsilon))+(r+0.5*sigma^2)*(20-i)*T/n)/(sigma*sqrt((20-i)*T/n))
-    d21[i] <- (log(data[i]/(K+epsilon))+(r-0.5*sigma^2)*(20-i)*T/n)/(sigma*sqrt((20-i)*T/n))
     call_value[i] <- data[i]*pnorm(d1[i])
-    }
-  cashflow <- double(0)                   # calculate the cash flow and replicating value
+    delta[i] <- pnorm(d1[i])+dnorm(d1[i])/(sigma*sqrt((20-i)*T/n))
+  }
+  delta[20] <- pnorm(d1[i])
+  cashflow <- double(0)               # calculate the cash flow and replicating value
   bt <- double(0)
   replicate <- double(0)
-  bt[1] <- K*exp(-r*T)*pnorm(d2[1])+K*(K*exp(-r*T)*pnorm(d2[1])-(K+epsilon)*exp(-r*T)*pnorm(d21[1]))/epsilon
+  bt[1] <- -call_value[1]+data[1]*delta[1]
   cashflow[1] <- 0
-  replicate[1] <- -bt[1]+data[1]*pnorm(d1[1])+K*(data[1]*pnorm(d1[1])-data[1]*pnorm(d11[1]))/epsilon
+  replicate[1] <- -bt[1]+data[1]*delta[1]
   for(i in 2:20){
-    cashflow[i] <- data[i]*(pnorm(d1[i])-pnorm(d1[i-1]))+K*(data[i]*(pnorm(d1[i])-pnorm(d1[i-1]))-data[i]*(pnorm(d11[i])-pnorm(d11[i-1])))/epsilon
+    cashflow[i] <- data[i]*(delta[i]-delta[i-1])
     bt[i] <- bt[i-1]*exp(r*T/n)+cashflow[i]
-    replicate[i] <- -bt[i]+data[i]*pnorm(d1[i])+K*(data[i]*pnorm(d1[i])-data[i]*pnorm(d11[i]))/epsilon
+    replicate[i] <- data[i]*delta[i]- bt[i]
   }
-  return(data.frame(stock=data,d1=d1,bt=bt,replicate=replicate,asset_or_nothing=call_value))
+  return(data.frame(stock=data,delta=delta,bt=bt,replicate=replicate,AON=call_value))
 }
 call2 <- A_N(data,100)
 print(call2)
 ```
 
 ```{r plot4,fig.height=7,echo=FALSE}
-plot9 <- ggplot(data.frame(x=seq(1:20),call_value = call2$asset_or_nothing),aes(x=x,y=call_value))+
+plot9 <- ggplot(data.frame(x=seq(1:20),call_value = call2$AON),aes(x=x,y=call_value))+
   geom_line(col="steelblue", size=0.7)+scale_x_continuous(breaks=seq(1, 20, 1))+
   labs(title="Asset-or-nothing option value", subtitle="K=100")
 plot10 <- ggplot(data.frame(x=seq(1:20),delta = call2$replicate),aes(x=x,y=delta))+
@@ -259,20 +275,29 @@ layout <- matrix(c(1,2,3),3,1,byrow=TRUE)
 multiplot(plot11,plot9, plot10,layout=layout)
 ```
 
-The value of the replicating portfolio at time T \[C=C(K)+K*CON(K)\]
+The value of the replicating portfolio at time T \[C=\triangle S+B\]
 The terminal value of the call at time T \[C=\frac{max(S-K,0)}{|S-K|}S\]
-Now repeat above process for 10000 times to generate the distribution of replicating error.
-```{r code7,fig.height=3}
-error <- double(0)
-for(i in 1:10000){
+Now repeat above process for 2000 times to generate the distribution of replicating error.
+```{r code7}
+stock <- call <- replicate <- error <- double(0)
+for(i in 1:2000){
   t <- A_N(S_T(s0,r,sigma,T),100)
-  error[i] <- t$replicate[20]-t$asset_or_nothing[20]
+  error[i] <- t$replicate[20]-t$AON[20]
+  replicate[i] <- t$replicate[20]
+  call[i] <- t$AON[20]
+  stock[i] <- t$stock[20]
 }
-
+```
+```{r 14,fig.height=5.5,fig.width=6,echo=FALSE}
 plot12<- ggplot(data.frame(x = error), aes(x = x))+ 
   geom_histogram(aes(y=..density..),fill="steelblue")+labs(x = 'r(t)', 
   y = 'density', title='Error distribution density')
-plot12
+plot15 <- ggplot(data.frame(x=stock,y1=replicate,y2=call))+
+  geom_point(aes(x=x,y=y1),size=0.5,color='steelblue')+
+  geom_point(aes(x=x,y=y2),size=0.5,color='orange')+
+  labs(title = "Value distribution",subtitle = "Replicate/AON call option",y="Option Value",x="Stock Value")
+layout <- matrix(c(1,2),2,1,byrow=TRUE)
+multiplot(plot12,plot15,layout=layout)
 ```
 
 
